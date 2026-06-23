@@ -1,0 +1,19 @@
+{
+  "name": "ClarityDSM",
+  "short_name": "ClarityDSM",
+  "description": "DSM-5-TR clinical reference and AI assistant for LCSWs.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFF9FB",
+  "theme_color": "#7A2E5E",
+  "icons": [
+    {
+      "src": "logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
