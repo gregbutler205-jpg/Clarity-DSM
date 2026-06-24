@@ -29,18 +29,24 @@ are written to **paraphrase rather than reproduce** copyrighted DSM-5-TR text.
 
 ## The API key
 
-The Anthropic API key is **not** bundled or committed. On first use, tap the key
-button (top-right) and paste a key from
-[console.anthropic.com](https://console.anthropic.com). It is stored only in the
-browser's `localStorage` on that device. Anyone the app is shared with simply
-enters their own key.
+No Anthropic key is ever bundled or committed. The app runs in one of two modes,
+chosen at build time by whether `VITE_PROXY_URL` is set. Model: `claude-sonnet-4-6`.
 
-Model: `claude-sonnet-4-6`. Calls go directly from the browser to the Anthropic
-Messages API using the `anthropic-dangerous-direct-browser-access` header.
+**Direct mode (default — single user / local dev).** `VITE_PROXY_URL` unset. On
+first use, tap the key button (top-right) and paste a key from
+[console.anthropic.com](https://console.anthropic.com). It's stored only in that
+browser's `localStorage`. Calls go straight to the Anthropic Messages API with the
+`anthropic-dangerous-direct-browser-access` header.
 
-> **Want to share it without each person needing a key?** Move to a small
-> server-side proxy that holds one key, and point `src/lib/anthropic.js` at the
-> proxy URL (dropping the `x-api-key` header). See `.env.example`.
+**Proxy mode (shared with colleagues).** `VITE_PROXY_URL` set to the deployed
+[`proxy/`](proxy/README.md) server (e.g. on Render), which holds the single key
+server-side. Users authenticate with a shared **access code** — no Anthropic key
+ever touches a device. See [`proxy/README.md`](proxy/README.md) for the Render
+deploy and how to set the `VITE_PROXY_URL` repo variable.
+
+> **Either mode**, the only outbound call carries the text the user typed —
+> so the "never enter client-identifiable information" rule always applies, and
+> a proxy does not make it HIPAA-covered.
 
 ## Develop
 

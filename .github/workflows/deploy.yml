@@ -27,6 +27,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # Set repo variable VITE_PROXY_URL (Settings → Secrets and variables →
+          # Actions → Variables) to the Render proxy URL to build in proxy mode.
+          # Left unset, the site builds in direct/BYO-key mode.
+          VITE_PROXY_URL: ${{ vars.VITE_PROXY_URL }}
       - uses: actions/configure-pages@v5
         with:
           # Enable Pages (Source = GitHub Actions) automatically on first run,

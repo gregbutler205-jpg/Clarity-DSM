@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import Logo from './components/Logo'
 import { MODES } from './modes'
-import { askClaude, getApiKey, setApiKey, hasApiKey } from './lib/anthropic'
+import { askClaude, getCredential, setCredential, hasCredential, AUTH } from './lib/anthropic'
 
 let resultSeq = 0
 
@@ -12,8 +12,8 @@ export default function App() {
   const [cmpB, setCmpB] = useState('')
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
-  const [keyPanelOpen, setKeyPanelOpen] = useState(!hasApiKey())
-  const [keyDraft, setKeyDraft] = useState(getApiKey())
+  const [keyPanelOpen, setKeyPanelOpen] = useState(!hasCredential())
+  const [keyDraft, setKeyDraft] = useState(getCredential())
 
   const mode = MODES.find((m) => m.id === modeId)
   const isCompare = mode.type === 'compare'
@@ -28,7 +28,7 @@ export default function App() {
   }, [input, modeId])
 
   function saveKey() {
-    setApiKey(keyDraft)
+    setCredential(keyDraft)
     setKeyPanelOpen(false)
   }
 
@@ -39,7 +39,7 @@ export default function App() {
       : input.trim()
     if (!userText) return
 
-    if (!hasApiKey()) {
+    if (!hasCredential()) {
       setKeyPanelOpen(true)
       return
     }
@@ -59,7 +59,7 @@ export default function App() {
       const body = await askClaude(mode.system, userText)
       updateResult(id, { status: 'done', body })
     } catch (err) {
-      if (err.message === 'NO_KEY') {
+      if (err.message === 'NO_CREDENTIAL') {
         setResults((r) => r.filter((x) => x.id !== id))
         setKeyPanelOpen(true)
       } else {
@@ -99,28 +99,25 @@ export default function App() {
         <button
           className="key-btn"
           onClick={() => {
-            setKeyDraft(getApiKey())
+            setKeyDraft(getCredential())
             setKeyPanelOpen((o) => !o)
           }}
-          aria-label="API key settings"
-          title="API key settings"
+          aria-label={`${AUTH.label} settings`}
+          title={`${AUTH.label} settings`}
         >
-          <i className={`ti ${hasApiKey() ? 'ti-key' : 'ti-key-off'}`} aria-hidden="true" />
+          <i className={`ti ${hasCredential() ? 'ti-key' : 'ti-key-off'}`} aria-hidden="true" />
         </button>
       </header>
 
       {keyPanelOpen && (
         <div className="key-panel card">
-          <label htmlFor="api-key">Anthropic API key</label>
-          <p className="key-help">
-            Stored only in this browser on this device — never uploaded or shared.
-            Get a key at console.anthropic.com.
-          </p>
+          <label htmlFor="api-key">{AUTH.label}</label>
+          <p className="key-help">{AUTH.help}</p>
           <div className="key-row">
             <input
               id="api-key"
               type="password"
-              placeholder="sk-ant-…"
+              placeholder={AUTH.placeholder}
               value={keyDraft}
               onChange={(e) => setKeyDraft(e.target.value)}
               autoComplete="off"

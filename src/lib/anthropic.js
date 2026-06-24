@@ -1,57 +1,116 @@
-// Direct browser → Anthropic Messages API.
+// Talks to Claude in one of two modes, chosen at build time:
 //
-// The API key is NOT bundled. It is entered by the user in-app and stored in
-// localStorage on their own device (mirrors the IntelliTrax `mi_ak` pattern).
-// Calls include `anthropic-dangerous-direct-browser-access` so Anthropic's CORS
-// allows the browser request.
+//  • PROXY mode  — when VITE_PROXY_URL is set. The app calls our own proxy
+//    (proxy/server.js, e.g. on Render), which holds the single Anthropic key
+//    server-side. Users authenticate with a shared ACCESS CODE, not a key, so
+//    no Anthropic key ever lives on the device. This is the shared-with-
+//    colleagues setup.
 //
-// If this app is ever shared so that colleagues should NOT need their own key,
-// the upgrade path is a small server-side proxy that holds one key (the
-// IntelliTrax/Insina proxy pattern) — swap ENDPOINT for the proxy URL and drop
-// the x-api-key header.
+//  • DIRECT mode — when VITE_PROXY_URL is unset. The app calls Anthropic
+//    directly and the user supplies their own API key (stored only in their
+//    browser). This is the single-user / local-dev setup.
+//
+// The stored credential (access code or API key) lives in localStorage and is
+// never bundled or committed.
 
-const ENDPOINT = 'https://api.anthropic.com/v1/messages'
+const PROXY_URL = (import.meta.env.VITE_PROXY_URL || '').replace(/\/+$/, '')
+export const PROXY_MODE = PROXY_URL.length > 0
+
 const MODEL = 'claude-sonnet-4-6'
 const MAX_TOKENS = 1000
 
-const KEY_STORAGE = 'clarity_anthropic_key'
+const STORAGE_KEY = PROXY_MODE ? 'clarity_access_code' : 'clarity_anthropic_key'
 
-export function getApiKey() {
+// UI-facing description of how the user authenticates, so the panel can label
+// itself correctly without knowing which mode is active.
+export const AUTH = PROXY_MODE
+  ? {
+      mode: 'proxy',
+      label: 'Access code',
+      placeholder: 'Enter your access code',
+      help:
+        'Enter the access code your practice shared with you. ' +
+        'Stored only in this browser on this device — never uploaded.',
+    }
+  : {
+      mode: 'direct',
+      label: 'Anthropic API key',
+      placeholder: 'sk-ant-…',
+      help:
+        'Stored only in this browser on this device — never uploaded or shared. ' +
+        'Get a key at console.anthropic.com.',
+    }
+
+export function getCredential() {
   try {
-    return localStorage.getItem(KEY_STORAGE) || ''
+    return localStorage.getItem(STORAGE_KEY) || ''
   } catch {
     return ''
   }
 }
 
-export function setApiKey(value) {
+export function setCredential(value) {
   try {
-    if (value) localStorage.setItem(KEY_STORAGE, value.trim())
-    else localStorage.removeItem(KEY_STORAGE)
+    if (value) localStorage.setItem(STORAGE_KEY, value.trim())
+    else localStorage.removeItem(STORAGE_KEY)
   } catch {
     /* ignore storage errors (private mode, etc.) */
   }
 }
 
-export function hasApiKey() {
-  return getApiKey().length > 0
+export function hasCredential() {
+  return getCredential().length > 0
 }
 
 /**
- * Send one request to Claude.
+ * Send one request to Claude (via the proxy or directly).
  * @param {string} system - the mode's system prompt
  * @param {string} userText - the user's question / inputs
  * @returns {Promise<string>} the assistant's plain-text reply
  */
 export async function askClaude(system, userText) {
-  const apiKey = getApiKey()
-  if (!apiKey) {
-    throw new Error('NO_KEY')
-  }
+  const credential = getCredential()
+  if (!credential) throw new Error('NO_CREDENTIAL')
+  return PROXY_MODE
+    ? askViaProxy(system, userText, credential)
+    : askDirect(system, userText, credential)
+}
 
+async function askViaProxy(system, userText, accessCode) {
   let res
   try {
-    res = await fetch(ENDPOINT, {
+    res = await fetch(`${PROXY_URL}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-access-code': accessCode,
+      },
+      body: JSON.stringify({ system, message: userText }),
+    })
+  } catch {
+    throw new Error('Network error — check your connection and try again.')
+  }
+
+  if (!res.ok) {
+    const detail = await errorDetail(res)
+    if (res.status === 401 || res.status === 403) {
+      throw new Error('Invalid access code. Open the panel (top right) and re-enter it.')
+    }
+    if (res.status === 429) {
+      throw new Error('Too many requests right now. Wait a moment and try again.')
+    }
+    throw new Error(detail || `Request failed (HTTP ${res.status}).`)
+  }
+
+  const data = await res.json()
+  if (data?.refusal) throw new Error('The model declined to answer this request.')
+  return (data?.text || '').trim() || 'No response text was returned.'
+}
+
+async function askDirect(system, userText, apiKey) {
+  let res
+  try {
+    res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -71,13 +130,7 @@ export async function askClaude(system, userText) {
   }
 
   if (!res.ok) {
-    let detail = ''
-    try {
-      const body = await res.json()
-      detail = body?.error?.message || ''
-    } catch {
-      /* ignore */
-    }
+    const detail = await errorDetail(res)
     if (res.status === 401) {
       throw new Error('Invalid API key. Open the key panel (top right) and re-enter it.')
     }
@@ -97,6 +150,15 @@ export async function askClaude(system, userText) {
     .join('')
     .trim()
   return text || 'No response text was returned.'
+}
+
+async function errorDetail(res) {
+  try {
+    const body = await res.json()
+    return body?.error?.message || body?.error || ''
+  } catch {
+    return ''
+  }
 }
 
 export { MODEL }
